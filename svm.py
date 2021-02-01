@@ -80,7 +80,7 @@ grid_search = GridSearchCV(SVC(), tuned_parameters, scoring=metric)
 grid_search.fit(X, y)
 
 print(' - Best parameters set found on development set:')
-print(grid_search.best_params_)
+print(grid_search.best_score_, grid_search.best_params_)
 
 print('\n - Grid scores on development set:')
 means = grid_search.cv_results_['mean_test_score']
