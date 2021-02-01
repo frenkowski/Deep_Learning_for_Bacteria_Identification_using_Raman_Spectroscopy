@@ -1,11 +1,12 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
+from keras.utils.vis_utils import plot_model
 from keras.wrappers.scikit_learn import KerasClassifier
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, classification_report
 from sklearn.model_selection import train_test_split, GridSearchCV
 import tensorflow as tf
 from tensorflow import keras
@@ -13,19 +14,12 @@ from tensorflow_docs import plots as tfplots
 from tensorflow.keras import layers, models
 
 
-def plot_confusion_matrix(y_true, y_predicted, labels=[], ax=None):
-    if ax is None:
-        _, ax = plt.subplots(1, 1, figsize=(12, 12))
-
-    ConfusionMatrixDisplay(
-        confusion_matrix=confusion_matrix(y_true.argmax(axis=1), y_predicted.argmax(axis=1)),
-        display_labels=labels
-    ).plot(include_values=True, cmap=plt.cm.Blues, ax=ax)
+np.random.seed(2021)
+tf.random.set_seed(2021)
 
 
-dataset_folder = os.path.join(os.getcwd(), 'dataset')
-def load_dataset(filename):
-    return os.path.join(dataset_folder, filename)
+def load_dataset(filename, folder):
+    return os.path.join(folder, filename)
 
 
 def extract_subset_by_classes(X_in, y_in, classes):
@@ -40,14 +34,49 @@ def extract_subset_by_classes(X_in, y_in, classes):
     return np.array(X_out), np.array(y_out)
 
 
-X = np.load(load_dataset('X_finetune.npy'))
-y = np.load(load_dataset('y_finetune.npy'))
+def build_model(units, hidden_layers, dropout_rate, optimizer, init_mode, regularizer_mode=None, **kwargs):
+    model = models.Sequential()
 
-X_test = np.load(load_dataset('X_test.npy'))
-y_test = np.load(load_dataset('y_test.npy'))
+    model.add(keras.Input(shape=input_shape))
+    model.add(layers.Flatten())
 
-print('X shape: {}\nY shape: {}'.format(X.shape, y.shape))
-print('X test shape: {}\nY test shape: {}'.format(X_test.shape, y_test.shape))
+    # Variable number of hidden layers
+    for i in range(hidden_layers):
+        model.add(layers.Dense(units // (i+1), activation='relu', kernel_initializer=init_mode, kernel_regularizer=regularizer_mode))
+        model.add(layers.Dropout(dropout_rate))
+
+    model.add(layers.Dense(num_classes, activation='softmax'))
+
+    model.compile(
+        optimizer=optimizer,
+        loss='categorical_crossentropy',
+        metrics=['accuracy']
+    )
+
+    return model
+
+
+def plot_confusion_matrix(y_true, y_predicted, labels=[], ax=None):
+    if ax is None:
+        _, ax = plt.subplots(1, 1, figsize=(12, 12))
+
+    ConfusionMatrixDisplay(
+        confusion_matrix=confusion_matrix(y_true, y_predicted),
+        display_labels=labels
+    ).plot(include_values=True, cmap=plt.cm.Blues, ax=ax)
+
+
+dataset_folder = os.path.join(os.getcwd(), 'dataset')
+output_folder = os.path.join(os.getcwd(), 'output', 'mlp')
+X = np.load(load_dataset('X_finetune.npy', dataset_folder))
+y = np.load(load_dataset('y_finetune.npy', dataset_folder))
+
+X_test = np.load(load_dataset('X_test.npy', dataset_folder))
+y_test = np.load(load_dataset('y_test.npy', dataset_folder))
+
+print('Input data:')
+print(' - X shape: {}\n - Y shape: {}'.format(X.shape, y.shape))
+print(' - X test shape: {}\n - Y test shape: {}'.format(X_test.shape, y_test.shape))
 
 valid_labels = [
     *range(14, 21+1),   # From MRSA 1 to S. lugdunensis
@@ -60,127 +89,130 @@ valid_labels = [
 X, y = extract_subset_by_classes(X, y, valid_labels)
 X_test, y_test = extract_subset_by_classes(X_test, y_test, valid_labels)
 
-print('X shape: {}\nY shape: {}'.format(X.shape, y.shape))
-print('X test shape: {}\nY test shape: {}'.format(X_test.shape, y_test.shape))
+print('Valid data:')
+print(' - X shape: {}\n - Y shape: {}'.format(X.shape, y.shape))
+print(' - X test shape: {}\n - Y test shape: {}'.format(X_test.shape, y_test.shape))
 
-y_indexes = {k: i for i, k in enumerate(set(y))}
-y_test_indexes = {k: i for i, k in enumerate(set(y_test))}
-
-num_classes = len(y_indexes)
+num_classes = len(set(y))
 input_shape = (X.shape[1], 1)
 
-# Reshape X to: (X.shape[0], X.shape[1], 1)
-# X = np.expand_dims(X, axis=-1)
-# Reshape X_train to: (X.shape[0], X.shape[1], 1)
-# X_test = np.expand_dims(X_test, axis=-1)
+indices = np.random.permutation(X.shape[0])
+X, y = X[indices], y[indices]
 
-y = list(map(lambda x: y_indexes[x], y))
-X_train, X_val, y_train, y_val = train_test_split(X, y, shuffle=True)
+# Map y values (6, 7, 14, 15, ...) to ordinal index (0, 1, 2, 3, ..., 14)
+y_indices = {k: i for i, k in enumerate(set(y))}
+y_test_indices = {k: i for i, k in enumerate(set(y_test))}
 
-y_train = keras.utils.to_categorical(y_train, num_classes)
-y_val = keras.utils.to_categorical(y_val, num_classes)
+y = list(map(lambda x: y_indices[x], y))
+y = keras.utils.to_categorical(y, num_classes)
 
-y_test = list(map(lambda x: y_test_indexes[x], y_test))
+y_test = list(map(lambda x: y_test_indices[x], y_test))
 y_test = keras.utils.to_categorical(y_test, num_classes)
+print()
 
-print('X train shape: {}\nY train shape: {}'.format(X_train.shape, y_train.shape))
-print('X val shape: {}\nY val shape: {}'.format(X_val.shape, y_val.shape))
-
-# -----------------------------
-
-def build_model(units, hidden_layers, optimizer='adam', init_mode='glorot_normal', dropout_rate=0.3, regularizer_mode=None):
-    model = models.Sequential([
-        keras.Input(shape=input_shape),
-        layers.Flatten(),
-    ])
-
-    # Variable number of hidden layers
-    for i in range(hidden_layers):
-        model.add(layers.Dense(units // (i+1), activation='relu', kernel_initializer=init_mode, kernel_regularizer=regularizer_mode))
-        model.add(layers.Dropout(dropout_rate))
-
-    # Output
-    model.add(layers.Dense(num_classes, activation='softmax'))
-
-    model.compile(
-        optimizer=optimizer,
-        loss='categorical_crossentropy',
-        metrics=['accuracy']
-    )
-
-    return model
-
-parameters_range = {
+print('### MLP Model ###')
+metric = 'accuracy'
+tuned_parameters = {
     'epochs': [50],
     'batch_size': [16, 32],
     'units': [256, 512],
     'hidden_layers': [1, 2],
     'optimizer': ['adam'],
     'init_mode': ['glorot_uniform'],
-    'dropout_rate': [0.0, 0.3],
-    'regularizer_mode':[None, (tf.keras.regularizers.l2(0.01))]
+    'dropout_rate': [0.1, 0.3]
 }
 
-accuracy_early_stop = tf.keras.callbacks.EarlyStopping(
-    monitor='loss',
-    patience=5,
-    min_delta=0.01,
-    restore_best_weights=True
-)
-
+print('> Grid search:')
+print(' - Tuning hyper-parameters for \'{}\' metric\n'.format(metric))
 grid_search = GridSearchCV(
-    estimator=KerasClassifier(build_fn=build_model, verbose=0),
-    param_grid=parameters_range,
+    KerasClassifier(build_fn=build_model, verbose=0),
+    tuned_parameters,
     cv=3,
-    n_jobs=-1,
+    n_jobs=1,
     verbose=1
 )
 
-model = grid_search.fit(X_train, y_train, callbacks=[accuracy_early_stop])
-print("Best: %f using %s" % (model.best_score_, model.best_params_))
+print(' - ', end='')
+grid_search.fit(X, y, callbacks=[
+    tf.keras.callbacks.EarlyStopping(
+        monitor='loss',
+        patience=5,
+        min_delta=0.01,
+        restore_best_weights=True
+    )
+])
 
-means = model.cv_results_['mean_test_score']
-stds = model.cv_results_['std_test_score']
-params = model.cv_results_['params']
-for mean, stdev, param in zip(means, stds, params):
-    print("%f (%f) with: %r" % (mean, stdev, param))
+print(' - Best parameters set found on development set:')
+print(grid_search.best_score_, grid_search.best_params_)
 
-# epochs = 50
-# batch_size = 16
+print('\n - Grid scores on development set:')
+means = grid_search.cv_results_['mean_test_score']
+stds = grid_search.cv_results_['std_test_score']
+for mean, std, params in zip(means, stds, grid_search.cv_results_['params']):
+    print('{:0.3f} (+/-{:0.03}) for {}'.format(mean, std * 2, params))
 
-# model.compile(
-#     optimizer=model_optimizer,
-#     loss=model_loss,
-#     metrics=['accuracy', *additional_metrics]
-# )
+print('\n - Fitting MLP with best parameters from grid search')
+X_train, X_val, y_train, y_val = train_test_split(X, y, shuffle=False)
+print(' - X train shape: {}\n - Y train shape: {}'.format(X_train.shape, y_train.shape))
+print(' - X val shape: {}\n - Y val shape: {}'.format(X_val.shape, y_val.shape))
 
-# history = model.fit(
-#     X_train,
-#     y_train,
-#     epochs=epochs,
-#     batch_size=batch_size,
-#     validation_data=(X_val, y_val),
-#     callbacks=[accuracy_early_stop]
-# )
+best_model = build_model(regularizer_mode=tf.keras.regularizers.l2(0.001), **grid_search.best_params_)
+best_model.summary()
+plot_model(best_model, to_file=os.path.join(output_folder, 'model.pdf'), show_shapes=True)
 
-# acc_plotter = tfplots.HistoryPlotter(metric='accuracy', smoothing_std=0)
+batch_size = grid_search.best_params_['batch_size']
+epochs = grid_search.best_params_['epochs']
+history = best_model.fit(
+    X_train,
+    y_train,
+    epochs=epochs,
+    batch_size=batch_size,
+    validation_data=(X_val, y_val),
+    verbose=1,
+    callbacks=[
+        tf.keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=5,
+            min_delta=0.01,
+            restore_best_weights=True
+        )
+    ]
+)
 
-# histories = {
-#     'Conv1D/MaxPool1D': history
-# }
+print(' - Generating network training plots...')
+histories = {'': history}
+accuracy_plotter = tfplots.HistoryPlotter(metric='accuracy', smoothing_std=0)
+loss_plotter = tfplots.HistoryPlotter(metric='loss', smoothing_std=0)
 
-# plt.figure(figsize=(15, 10))
-# acc_plotter.plot(histories)
+plt.figure(figsize=(15, 10))
+accuracy_plotter.plot(histories)
+plt.savefig(os.path.join(output_folder, 'accuracy_plot.pdf'))
 
-y_predicted = model.predict(X_test)
+plt.figure(figsize=(15, 10))
+loss_plotter.plot(histories)
+plt.savefig(os.path.join(output_folder, 'loss_plot.pdf'))
+
+print(' - Predicting')
+y_predicted = np.argmax(best_model.predict(X_test), axis=-1)
+y_test = np.argmax(y_test, axis=-1)
 
 scores = {}
-scores['Accuracy'] = accuracy_score(y_test.argmax(axis=-1), y_predicted.argmax(axis=-1))
-scores['Precision'] = precision_score(y_test.argmax(axis=-1), y_predicted.argmax(axis=-1), average='macro')
-scores['Recall'] = recall_score(y_test.argmax(axis=-1), y_predicted.argmax(axis=-1), average='macro')
-scores['F1'] = f1_score(y_test.argmax(axis=-1), y_predicted.argmax(axis=-1), average='macro')
-
+scores['Accuracy'] = accuracy_score(y_test, y_predicted)
+scores['Precision'] = precision_score(y_test, y_predicted, average='macro')
+scores['Recall'] = recall_score(y_test, y_predicted, average='macro')
+scores['F1'] = f1_score(y_test, y_predicted, average='macro')
 print(scores)
 
-plot_confusion_matrix(y_test, y_predicted, labels=y_test_indexes.keys())
+print('\n - Detailed classification report:')
+y_test = list(map(lambda x: list(y_test_indices.keys())[x], y_test))
+y_predicted = list(map(lambda x: list(y_test_indices.keys())[x], y_predicted))
+detailed_report = classification_report(y_test, y_predicted)
+
+print(detailed_report, end='\n\n')
+with open(os.path.join(output_folder, 'classification_report.txt'), 'w') as out:
+    out.writelines(detailed_report)
+
+print(' - Generating confusion matrix...')
+plot_confusion_matrix(y_test, y_predicted, labels=y_test_indices.keys())
+plt.savefig(os.path.join(output_folder, 'confusion_matrix.pdf'))
 plt.show()
