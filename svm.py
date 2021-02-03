@@ -1,63 +1,34 @@
 import os
 
 
-import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, classification_report
+from sklearn.decomposition import PCA
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 from sklearn.model_selection import GridSearchCV
 from sklearn.svm import SVC
 
 
+from definitions import bacteria_list
+import utils
+
+
 np.random.seed(2021)
 
-
-def load_dataset(filename, folder):
-    return os.path.join(folder, filename)
-
-
-def extract_subset_by_classes(X_in, y_in, classes):
-    X_out, y_out = [], []
-
-    for (value, label) in zip(X_in, y_in):
-        if label in classes:
-            X_out.append(value)
-            y_out.append(label)
-
-    return np.array(X_out), np.array(y_out)
-
-
-def plot_confusion_matrix(y_true, y_predicted, labels=[], ax=None):
-    if ax is None:
-        _, ax = plt.subplots(1, 1, figsize=(12, 12))
-
-    ConfusionMatrixDisplay(
-        confusion_matrix=confusion_matrix(y_true, y_predicted),
-        display_labels=labels
-    ).plot(include_values=True, cmap=plt.cm.Blues, ax=ax)
-
-
-dataset_folder = os.path.join(os.getcwd(), 'dataset')
+dataset_folder = os.path.join(os.getcwd(), 'dataset', 'bacteria')
 output_folder = os.path.join(os.getcwd(), 'output', 'svm')
-X = np.load(load_dataset('X_finetune.npy', dataset_folder))
-y = np.load(load_dataset('y_finetune.npy', dataset_folder))
 
-X_test = np.load(load_dataset('X_test.npy', dataset_folder))
-y_test = np.load(load_dataset('y_test.npy', dataset_folder))
+X = np.load(utils.load_dataset('X_reference.npy', dataset_folder))
+y = np.load(utils.load_dataset('y_reference.npy', dataset_folder))
+
+X_test = np.load(utils.load_dataset('X_test.npy', dataset_folder))
+y_test = np.load(utils.load_dataset('y_test.npy', dataset_folder))
 
 print('Input data:')
 print(' - X shape: {}\n - Y shape: {}'.format(X.shape, y.shape))
 print(' - X test shape: {}\n - Y test shape: {}'.format(X_test.shape, y_test.shape))
 
-valid_labels = [
-    *range(14, 21+1),   # From MRSA 1 to S. lugdunensis
-    *range(25, 29+1),   # From Group A Strep. to Group G Strep.
-    6,                  # E. faecalis 1
-    7,                  # E. faecalis 2
-    19                  # S. enterica
-]
-
-X, y = extract_subset_by_classes(X, y, valid_labels)
-X_test, y_test = extract_subset_by_classes(X_test, y_test, valid_labels)
+X, y = utils.extract_subset_by_classes(X, y, bacteria_list.keys())
+X_test, y_test = utils.extract_subset_by_classes(X_test, y_test, bacteria_list.keys())
 
 print('Valid data:')
 print(' - X shape: {}\n - Y shape: {}'.format(X.shape, y.shape))
@@ -67,6 +38,13 @@ num_classes = len(set(y))
 print()
 
 # ------------------
+print('### PCA ###')
+pca = PCA(n_components=20)
+pca.fit(X)
+
+X = pca.transform(X)
+X_test = pca.transform(X_test)
+
 print('### SVM Model ###')
 metric = 'accuracy'
 tuned_parameters = [
@@ -76,7 +54,7 @@ tuned_parameters = [
 
 print('> Grid search:')
 print(' - Tuning hyper-parameters for \'{}\' metric\n'.format(metric))
-grid_search = GridSearchCV(SVC(), tuned_parameters, scoring=metric)
+grid_search = GridSearchCV(SVC(), tuned_parameters, cv=2, verbose=2, scoring=metric, refit=False)
 grid_search.fit(X, y)
 
 print(' - Best parameters set found on development set:')
@@ -111,6 +89,9 @@ with open(os.path.join(output_folder, 'classification_report.txt'), 'w') as out:
     out.writelines(detailed_report)
 
 print(' - Generating confusion matrix...')
-plot_confusion_matrix(y_test, y_predicted, labels=set(y_test))
-plt.savefig(os.path.join(output_folder, 'confusion_matrix.pdf'))
-plt.show()
+utils.plot_confusion_matrix(
+    y_test,
+    y_predicted,
+    labels=bacteria_list.values(),
+    output=os.path.join(output_folder, 'confusion_matrix.pdf')
+)

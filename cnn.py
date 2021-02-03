@@ -6,7 +6,7 @@ from keras.utils.vis_utils import plot_model
 from keras.wrappers.scikit_learn import KerasClassifier
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, classification_report
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 from sklearn.model_selection import train_test_split, GridSearchCV
 import tensorflow as tf
 from tensorflow import keras
@@ -14,24 +14,8 @@ from tensorflow_docs import plots as tfplots
 from tensorflow.keras import layers, models
 
 
-np.random.seed(2021)
-tf.random.set_seed(2021)
-
-
-def load_dataset(filename, folder):
-    return os.path.join(folder, filename)
-
-
-def extract_subset_by_classes(X_in, y_in, classes):
-    X_out = []
-    y_out = []
-
-    for (value, label) in zip(X_in, y_in):
-        if label in classes:
-            X_out.append(value)
-            y_out.append(label)
-
-    return np.array(X_out), np.array(y_out)
+from definitions import bacteria_list
+import utils
 
 
 def build_model(conv_layers, filters, kernel_size, units, dropout_rate, optimizer, init_mode, regularizer_mode=None, **kwargs):
@@ -62,38 +46,25 @@ def build_model(conv_layers, filters, kernel_size, units, dropout_rate, optimize
     return model
 
 
-def plot_confusion_matrix(y_true, y_predicted, labels=[], ax=None):
-    if ax is None:
-        _, ax = plt.subplots(1, 1, figsize=(12, 12))
+np.random.seed(2021)
+tf.random.set_seed(2021)
 
-    ConfusionMatrixDisplay(
-        confusion_matrix=confusion_matrix(y_true, y_predicted),
-        display_labels=labels
-    ).plot(include_values=True, cmap=plt.cm.Blues, ax=ax)
-
-
-dataset_folder = os.path.join(os.getcwd(), 'dataset')
+dataset_folder = os.path.join(os.getcwd(), 'dataset', 'bacteria')
+model_folder = os.path.join(os.getcwd(), 'models', 'cnn')
 output_folder = os.path.join(os.getcwd(), 'output', 'cnn')
-X = np.load(load_dataset('X_finetune.npy', dataset_folder))
-y = np.load(load_dataset('y_finetune.npy', dataset_folder))
 
-X_test = np.load(load_dataset('X_test.npy', dataset_folder))
-y_test = np.load(load_dataset('y_test.npy', dataset_folder))
+X = np.load(utils.load_dataset('X_reference.npy', dataset_folder))
+y = np.load(utils.load_dataset('y_reference.npy', dataset_folder))
+
+X_test = np.load(utils.load_dataset('X_test.npy', dataset_folder))
+y_test = np.load(utils.load_dataset('y_test.npy', dataset_folder))
 
 print('Input data:')
 print(' - X shape: {}\n - Y shape: {}'.format(X.shape, y.shape))
 print(' - X test shape: {}\n - Y test shape: {}'.format(X_test.shape, y_test.shape))
 
-valid_labels = [
-    *range(14, 21+1),   # From MRSA 1 to S. lugdunensis
-    *range(25, 29+1),   # From Group A Strep. to Group G Strep.
-    6,                  # E. faecalis 1
-    7,                  # E. faecalis 2
-    19                  # S. enterica
-]
-
-X, y = extract_subset_by_classes(X, y, valid_labels)
-X_test, y_test = extract_subset_by_classes(X_test, y_test, valid_labels)
+X, y = utils.extract_subset_by_classes(X, y, bacteria_list.keys())
+X_test, y_test = utils.extract_subset_by_classes(X_test, y_test, bacteria_list.keys())
 
 print('Valid data:')
 print(' - X shape: {}\n - Y shape: {}'.format(X.shape, y.shape))
@@ -102,8 +73,7 @@ print(' - X test shape: {}\n - Y test shape: {}'.format(X_test.shape, y_test.sha
 num_classes = len(set(y))
 input_shape = (X.shape[1], 1)
 
-indices = np.random.permutation(X.shape[0])
-X, y = X[indices], y[indices]
+X, y = utils.shuffle(X, y)
 
 # Reshape X to: (X.shape[0], X.shape[1], 1)
 X = np.expand_dims(X, axis=-1)
@@ -131,14 +101,6 @@ tuned_parameters = {
     # 'kernel_size': [3, 5],
     # 'units': [512, 1024],
     # 'dropout_rate': [0.3, 0.5],
-
-    # Grande
-    # 'batch_size': [64],
-    # 'conv_layers': [2],
-    # 'filters': [64],
-    # 'kernel_size': [5],
-    # 'units': [1024],
-    # 'dropout_rate': [0],
 
     'batch_size': [64],
     'conv_layers': [3],
@@ -212,6 +174,10 @@ history = best_model.fit(
     ]
 )
 
+print(' - Saving model and weights to file')
+best_model.save(os.path.join(model_folder, 'CNN.h5'))
+best_model.save_weights(os.path.join(model_folder, 'CNN_weights.h5'))
+
 print(' - Generating network training plots...')
 histories = {'': history}
 accuracy_plotter = tfplots.HistoryPlotter(metric='accuracy', smoothing_std=0)
@@ -246,6 +212,9 @@ with open(os.path.join(output_folder, 'classification_report.txt'), 'w') as out:
     out.writelines(detailed_report)
 
 print(' - Generating confusion matrix...')
-plot_confusion_matrix(y_test, y_predicted, labels=y_test_indices.keys())
-plt.savefig(os.path.join(output_folder, 'confusion_matrix.pdf'))
-plt.show()
+utils.plot_confusion_matrix(
+    y_test,
+    y_predicted,
+    labels=bacteria_list.values(),
+    output=os.path.join(output_folder, 'confusion_matrix.pdf')
+)
