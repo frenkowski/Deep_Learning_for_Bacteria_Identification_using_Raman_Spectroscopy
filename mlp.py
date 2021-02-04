@@ -9,7 +9,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, models
 
-from definitions import bacteria_list
+from definitions import antibiotics, bacteria_antibiotics, bacteria_list
 import processing
 
 
@@ -41,20 +41,20 @@ tf.random.set_seed(2021)
 dataset_folder = os.path.join(os.getcwd(), 'dataset', 'bacteria')
 output_folder = os.path.join(os.getcwd(), 'output', 'mlp')
 
-X, y, y_indices = processing.preprocess_dataset('reference', dataset_folder,
+X, y, y_indices = processing.preprocess_dataset('finetune', dataset_folder,
     classes=bacteria_list.keys(),
     one_hot_encode=True
 )
+
+print(y_indices)
 
 num_classes = len(y_indices)
 input_shape = (X.shape[1], 1)
 
-print('\n')
 X_test, y_test, y_test_indices = processing.preprocess_dataset('test', dataset_folder,
     classes=bacteria_list.keys(),
     one_hot_encode=True
 )
-print()
 
 # -------
 
@@ -63,12 +63,12 @@ print('### MLP Model ###')
 metric = 'accuracy'
 tuned_parameters = {
     'epochs': [50],
-    'batch_size': [16, 32],
-    'units': [256, 512],
-    'hidden_layers': [1, 2],
+    'batch_size': [16],
+    'units': [256],
+    'hidden_layers': [1],
     'optimizer': ['adam'],
     'init_mode': ['glorot_uniform'],
-    'dropout_rate': [0.1, 0.3]
+    'dropout_rate': [0.3]
 }
 
 print('> Grid search:')
@@ -77,7 +77,7 @@ grid_search = GridSearchCV(
     KerasClassifier(build_fn=build_model, verbose=0),
     tuned_parameters,
     cv=2,
-    n_jobs=1,
+    n_jobs=2,
     verbose=2
 )
 
@@ -97,13 +97,13 @@ best_params = grid_search.best_params_
 
 # -------
 
-print('\n - Fitting MLP with best parameters from grid search')
+print('\n> Fitting MLP with best parameters from grid search')
 X_train, X_val, y_train, y_val = train_test_split(X, y, shuffle=False)
 print(' - X train shape: {}\n - Y train shape: {}'.format(X_train.shape, y_train.shape))
 print(' - X val shape: {}\n - Y val shape: {}'.format(X_val.shape, y_val.shape))
 print()
 
-best_model = build_model(regularizer_mode=tf.keras.regularizers.l2(0.001), **best_params)
+best_model = build_model(regularizer_mode=None, **best_params)
 best_model.summary()
 plot_model(best_model, to_file=os.path.join(output_folder, 'model', 'model.pdf'), show_shapes=True)
 
@@ -128,14 +128,26 @@ history = best_model.fit(
 
 processing.save_history(best_model, history, output=output_folder)
 
-print(' - Predicting')
+print('\n> Predicting 30 class isolates')
 y_predicted = np.argmax(best_model.predict(X_test), axis=-1)
 y_test = np.argmax(y_test, axis=-1)
 
 processing.performance_summary(
     y_test,
     y_predicted,
-    y_mapping=y_indices.values(),
+    y_mapping=lambda x: list(y_indices.values())[x],
     y_labels=bacteria_list.values(),
     output=output_folder
+)
+
+print('\n> Predicting antibiotic treatments')
+antibiotic_predicted = list(map(lambda x: bacteria_antibiotics[x], y_predicted))
+antibiotic_test = list(map(lambda x: bacteria_antibiotics[x], y_test))
+
+processing.performance_summary(
+    antibiotic_predicted,
+    antibiotic_test,
+    y_mapping=lambda x: antibiotics[x],
+    y_labels=np.take(list(antibiotics.values()), list(set(antibiotic_test))),
+    output=os.path.join(output_folder, 'antibiotic')
 )

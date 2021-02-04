@@ -10,11 +10,11 @@ import utils
 
 
 def preprocess_dataset(name, path, classes=None, shuffle=True, expand_dims=False, one_hot_encode=False, verbose=2):
-    X = np.load(utils.load_dataset('X_{}.npy'.format(name), path))
-    y = np.load(utils.load_dataset('y_{}.npy'.format(name), path))
+    X = utils.load_dataset('X_{}.npy'.format(name), path)
+    y = utils.load_dataset('y_{}.npy'.format(name), path)
 
     if verbose > 0:
-        print('> Input ({}) data:'.format(name))
+        print('\n> Input ({}) data:'.format(name))
         print(' - X shape: {}\n - Y shape: {}'.format(X.shape, y.shape))
 
     X, y = utils.extract_subset_by_classes(X, y, classes)
@@ -81,7 +81,7 @@ def save_history(model, history, output, persist_model=True):
     plt.savefig(os.path.join(output, 'loss_plot.pdf'))
 
 
-def performance_summary(y_test, y_predicted, output, y_mapping=[], y_labels=None):
+def performance_summary(y_test, y_predicted, output, y_mapping=None, y_labels=None):
     scores = {}
     scores['Accuracy'] = accuracy_score(y_test, y_predicted)
     scores['Precision'] = precision_score(y_test, y_predicted, average='macro')
@@ -90,8 +90,9 @@ def performance_summary(y_test, y_predicted, output, y_mapping=[], y_labels=None
     print(scores)
 
     print(' - Detailed classification report:')
-    y_test = list(map(lambda x: list(y_mapping)[x], y_test))
-    y_predicted = list(map(lambda x: list(y_mapping)[x], y_predicted))
+    if y_mapping is not None:
+        y_test = list(map(y_mapping, y_test))
+        y_predicted = list(map(y_mapping, y_predicted))
     detailed_report = classification_report(y_test, y_predicted)
 
     print(detailed_report, end='\n')

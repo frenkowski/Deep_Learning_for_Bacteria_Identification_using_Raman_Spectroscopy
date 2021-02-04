@@ -40,3 +40,64 @@ bacteria_list = {
     # 23: 'S. pneumoniae 2',
     # 24: 'S. pneumoniae 1',
 }
+
+antibiotics = {
+    0: 'Meropenem',
+    1: 'Ciprofloxacin',
+    2: 'TZP',
+    3: 'Vancomycin',
+    4: 'Ceftriaxone',
+    5: 'Penicillin',
+    6: 'Daptomycin',
+    7: 'Caspofungin',
+}
+
+bacteria_antibiotics = {
+    3: 0,
+    4: 0,
+    9: 0,
+    10: 0,
+    2: 0,
+    8: 0,
+    11: 0,
+    22: 0,
+
+    19: 1,
+
+    12: 2,
+    13: 2,
+
+    14: 3,
+    18: 3,
+    15: 3,
+    20: 3,
+    21: 3,
+    16: 3,
+    17: 3,
+
+    23: 4,
+    24: 4,
+
+    26: 5,
+    27: 5,
+    28: 5,
+    29: 5,
+    25: 5,
+    6: 5,
+    7: 5,
+
+    5: 6,
+
+    0: 7,
+    1: 7
+}
+
+
+def bacteria_name(index):
+    return bacteria_list[index]
+
+
+def bacteria_class(name):
+    for key, value in bacteria_list.items():
+        if value == name:
+            return key

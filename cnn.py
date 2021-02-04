@@ -7,9 +7,9 @@ import numpy as np
 from sklearn.model_selection import train_test_split, GridSearchCV
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers, models
+from tensorflow.keras import layers, models, Model
 
-from definitions import bacteria_list
+from definitions import antibiotics, bacteria_antibiotics, bacteria_list
 import processing
 
 
@@ -21,8 +21,8 @@ def build_model(conv_layers, filters, kernel_size, units, dropout_rate, optimize
 
     # Conv
     for i in range(conv_layers):
-        model.add(layers.Conv1D(filters // (i+1), kernel_size=kernel_size, padding='same', activation='relu'))
-        model.add(layers.AvgPool1D(2, strides=2, padding='valid'))
+        model.add(layers.Conv1D(filters * (i+1), kernel_size=kernel_size, padding='same', activation='relu'))
+        model.add(layers.MaxPooling1D(2, strides=2, padding='same'))
 
     # FCN
     model.add(layers.Flatten())
@@ -56,7 +56,12 @@ X, y, y_indices = processing.preprocess_dataset('reference', dataset_folder,
 num_classes = len(y_indices)
 input_shape = (X.shape[1], 1)
 
-print('\n')
+X_finetune, y_finetune, y_finetune_indices = processing.preprocess_dataset('finetune', dataset_folder,
+    classes=bacteria_list.keys(),
+    expand_dims=True,
+    one_hot_encode=True
+)
+
 X_test, y_test, y_test_indices = processing.preprocess_dataset('test', dataset_folder,
     classes=bacteria_list.keys(),
     expand_dims=True,
@@ -67,9 +72,10 @@ print()
 # -------
 
 print('### CNN Model ###')
+
 metric = 'accuracy'
 tuned_parameters = {
-    'epochs': [2],
+    'epochs': [50],
     # 'batch_size': [32, 64],
     # 'conv_layers': [1, 2],
     # 'filters': [16, 32],
@@ -79,10 +85,10 @@ tuned_parameters = {
 
     'batch_size': [64],
     'conv_layers': [3],
-    'filters': [32],
-    'kernel_size': [3],
+    'filters': [8],
+    'kernel_size': [5],
     'units': [256],
-    'dropout_rate': [0.3],
+    'dropout_rate': [0.2],
     'optimizer': ['adam'],
     'init_mode': ['glorot_uniform'],
 }
@@ -94,8 +100,7 @@ grid_search = GridSearchCV(
     tuned_parameters,
     cv=2,
     n_jobs=3,
-    verbose=2,
-    refit=False
+    verbose=2
 )
 
 print(' - ', end='')
@@ -112,20 +117,35 @@ processing.grid_search_summary(grid_search)
 
 # -------
 
-print('\n> Fitting CNN with best parameters from grid search')
-X_train, X_val, y_train, y_val = train_test_split(X, y, shuffle=False)
+print('\n> Fine tuning best CNN model from grid search')
+X_train, X_val, y_train, y_val = train_test_split(X_finetune, y_finetune, shuffle=False)
 print(' - X train shape: {}\n - Y train shape: {}'.format(X_train.shape, y_train.shape))
 print(' - X val shape: {}\n - Y val shape: {}'.format(X_val.shape, y_val.shape))
 print()
 
-# best_model = build_model(regularizer_mode=tf.keras.regularizers.l2(0.001), **grid_search.best_params_)
-best_model = build_model(**grid_search.best_params_)
-best_model.summary()
-plot_model(best_model, to_file=os.path.join(output_folder, 'model', 'model.pdf'), show_shapes=True)
+base_model = grid_search.best_estimator_.model
+base_model.trainable = False
+# base_model.summary()
+
+x = base_model.get_layer('flatten').output
+x = layers.Dense(256, activation='relu')(x)
+x = layers.Dense(64, activation='relu')(x)
+x = layers.Dense(num_classes, activation='softmax')(x)
+
+finetune_model = Model(inputs=base_model.input, outputs=x)
+finetune_model.summary()
+
+finetune_model.compile(
+    optimizer='adam',
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+plot_model(finetune_model, to_file=os.path.join(output_folder, 'model', 'model.pdf'), show_shapes=True)
 
 batch_size = grid_search.best_params_['batch_size']
 epochs = grid_search.best_params_['epochs']
-history = best_model.fit(
+history = finetune_model.fit(
     X_train,
     y_train,
     epochs=epochs,
@@ -142,10 +162,10 @@ history = best_model.fit(
     ]
 )
 
-processing.save_history(best_model, history, output=output_folder)
+processing.save_history(finetune_model, history, output=output_folder)
 
-print('\n> Predicting')
-y_predicted = np.argmax(best_model.predict(X_test), axis=-1)
+print('\n> Predicting 30 class isolates')
+y_predicted = np.argmax(finetune_model.predict(X_test), axis=-1)
 y_test = np.argmax(y_test, axis=-1)
 
 processing.performance_summary(
@@ -154,4 +174,16 @@ processing.performance_summary(
     y_mapping=y_indices.values(),
     y_labels=bacteria_list.values(),
     output=output_folder
+)
+
+print('\n> Predicting antibiotic treatments')
+antibiotic_predicted = list(map(lambda x: bacteria_antibiotics[x], y_predicted))
+antibiotic_test = list(map(lambda x: bacteria_antibiotics[x], y_test))
+
+processing.performance_summary(
+    antibiotic_predicted,
+    antibiotic_test,
+    y_mapping=lambda x: antibiotics[x],
+    y_labels=np.take(list(antibiotics.values()), list(set(antibiotic_test))),
+    output=os.path.join(output_folder, 'antibiotic')
 )

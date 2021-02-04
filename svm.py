@@ -1,15 +1,12 @@
 import os
 
-
 import numpy as np
 from sklearn.decomposition import PCA
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 from sklearn.model_selection import GridSearchCV
 from sklearn.svm import SVC
 
-
-from definitions import bacteria_list
-import utils
+from definitions import antibiotics, bacteria_antibiotics, bacteria_list
+import processing
 
 
 np.random.seed(2021)
@@ -17,27 +14,17 @@ np.random.seed(2021)
 dataset_folder = os.path.join(os.getcwd(), 'dataset', 'bacteria')
 output_folder = os.path.join(os.getcwd(), 'output', 'svm')
 
-X = np.load(utils.load_dataset('X_reference.npy', dataset_folder))
-y = np.load(utils.load_dataset('y_reference.npy', dataset_folder))
-
-X_test = np.load(utils.load_dataset('X_test.npy', dataset_folder))
-y_test = np.load(utils.load_dataset('y_test.npy', dataset_folder))
-
-print('Input data:')
-print(' - X shape: {}\n - Y shape: {}'.format(X.shape, y.shape))
-print(' - X test shape: {}\n - Y test shape: {}'.format(X_test.shape, y_test.shape))
-
-X, y = utils.extract_subset_by_classes(X, y, bacteria_list.keys())
-X_test, y_test = utils.extract_subset_by_classes(X_test, y_test, bacteria_list.keys())
-
-print('Valid data:')
-print(' - X shape: {}\n - Y shape: {}'.format(X.shape, y.shape))
-print(' - X test shape: {}\n - Y test shape: {}'.format(X_test.shape, y_test.shape))
+X, y = processing.preprocess_dataset('finetune', dataset_folder, classes=bacteria_list.keys())
 
 num_classes = len(set(y))
-print()
+input_shape = (X.shape[1], 1)
+
+X_test, y_test = processing.preprocess_dataset('test', dataset_folder, classes=bacteria_list.keys())
+
+print(set(y_test))
 
 # ------------------
+
 print('### PCA ###')
 pca = PCA(n_components=20)
 pca.fit(X)
@@ -57,41 +44,33 @@ print(' - Tuning hyper-parameters for \'{}\' metric\n'.format(metric))
 grid_search = GridSearchCV(SVC(), tuned_parameters, cv=2, verbose=2, scoring=metric, refit=False)
 grid_search.fit(X, y)
 
-print(' - Best parameters set found on development set:')
-print(grid_search.best_score_, grid_search.best_params_)
-
-print('\n - Grid scores on development set:')
-means = grid_search.cv_results_['mean_test_score']
-stds = grid_search.cv_results_['std_test_score']
-for mean, std, params in zip(means, stds, grid_search.cv_results_['params']):
-    print('{:0.3f} (+/-{:0.03}) for {}'.format(mean, std * 2, params))
+processing.grid_search_summary(grid_search)
 
 print('\n - Fitting SVM with best parameters from grid search')
 classifier = SVC()
 classifier.set_params(**grid_search.best_params_)
 classifier.fit(X, y)
 
-print('\n - Predicting')
-y_predicted = classifier.predict(X_test)
+print('\n> Predicting 30 class isolates')
+y_predicted = list(map(int, classifier.predict(X_test)))
+y_test = list(map(int, y_test))
 
-scores = {}
-scores['Accuracy'] = accuracy_score(y_test, y_predicted)
-scores['Precision'] = precision_score(y_test, y_predicted, average='macro')
-scores['Recall'] = recall_score(y_test, y_predicted, average='macro')
-scores['F1'] = f1_score(y_test, y_predicted, average='macro')
-print(scores)
-
-print('\n - Detailed classification report:')
-detailed_report = classification_report(y_test, y_predicted)
-
-print(detailed_report, end='\n\n')
-with open(os.path.join(output_folder, 'classification_report.txt'), 'w') as out:
-    out.writelines(detailed_report)
-
-print(' - Generating confusion matrix...')
-utils.plot_confusion_matrix(
+processing.performance_summary(
     y_test,
     y_predicted,
-    labels=bacteria_list.values(),
-    output=os.path.join(output_folder, 'confusion_matrix.pdf')
+    output_folder,
+    y_mapping=lambda x: bacteria_list[x],
+    y_labels=bacteria_list.values()
+)
+
+print('\n> Predicting antibiotic treatments')
+antibiotic_predicted = list(map(lambda x: bacteria_antibiotics[x], y_predicted))
+antibiotic_test = list(map(lambda x: bacteria_antibiotics[x], y_test))
+
+processing.performance_summary(
+    antibiotic_predicted,
+    antibiotic_test,
+    y_mapping=lambda x: antibiotics[x],
+    y_labels=np.take(list(antibiotics.values()), list(set(antibiotic_test))),
+    output=os.path.join(output_folder, 'antibiotic')
 )
