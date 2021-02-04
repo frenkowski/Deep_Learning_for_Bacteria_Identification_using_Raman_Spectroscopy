@@ -3,13 +3,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 from keras.utils.vis_utils import plot_model
 from keras.wrappers.scikit_learn import KerasClassifier
-import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 from sklearn.model_selection import train_test_split, GridSearchCV
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow_docs import plots as tfplots
 from tensorflow.keras import layers, models
 
 from definitions import bacteria_list
