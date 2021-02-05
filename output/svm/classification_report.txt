@@ -1,0 +1,21 @@
+                precision    recall  f1-score   support
+
+ E. faecalis 1       1.00      0.19      0.32       100
+ E. faecalis 2       0.51      0.84      0.64       100
+Group A Strep.       0.81      0.87      0.84       100
+Group B Strep.       0.99      0.96      0.97       100
+Group C Strep.       0.97      0.98      0.98       100
+Group G Strep.       0.89      0.93      0.91       100
+        MRSA 1       0.63      0.84      0.72       100
+        MRSA 2       0.90      0.57      0.70       100
+        MSSA 1       0.89      0.90      0.90       100
+        MSSA 2       0.98      0.92      0.95       100
+        MSSA 3       0.72      0.55      0.63       100
+   S. enterica       0.96      1.00      0.98       100
+S. epidermidis       1.00      1.00      1.00       100
+S. lugdunensis       0.74      0.96      0.83       100
+  S. sanguinis       0.86      0.90      0.88       100
+
+      accuracy                           0.83      1500
+     macro avg       0.86      0.83      0.82      1500
+  weighted avg       0.86      0.83      0.82      1500

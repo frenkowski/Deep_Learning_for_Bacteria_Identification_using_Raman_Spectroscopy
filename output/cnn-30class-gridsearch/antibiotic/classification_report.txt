@@ -1,0 +1,14 @@
+               precision    recall  f1-score   support
+
+  Caspofungin       1.00      0.99      0.99       203
+  Ceftriaxone       0.96      0.93      0.95       207
+Ciprofloxacin       0.98      0.99      0.98        99
+   Daptomycin       1.00      0.92      0.96       109
+    Meropenem       0.96      0.96      0.96       806
+   Penicillin       0.93      0.95      0.94       692
+          TZP       0.79      0.93      0.85       170
+   Vancomycin       0.96      0.94      0.95       714
+
+     accuracy                           0.95      3000
+    macro avg       0.95      0.95      0.95      3000
+ weighted avg       0.95      0.95      0.95      3000

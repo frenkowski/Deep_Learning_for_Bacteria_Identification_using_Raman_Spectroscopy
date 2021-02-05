@@ -62,13 +62,13 @@ print('### MLP Model ###')
 
 metric = 'accuracy'
 tuned_parameters = {
-    'epochs': [50],
-    'batch_size': [16],
+    'epochs': [100],
+    'batch_size': [64],
     'units': [256],
     'hidden_layers': [1],
+    'dropout_rate': [0.5],
     'optimizer': ['adam'],
     'init_mode': ['glorot_uniform'],
-    'dropout_rate': [0.3]
 }
 
 print('> Grid search:')
@@ -128,7 +128,7 @@ history = best_model.fit(
 
 processing.save_history(best_model, history, output=output_folder)
 
-print('\n> Predicting 30 class isolates')
+print('\n> Predicting 15 class isolates')
 y_predicted = np.argmax(best_model.predict(X_test), axis=-1)
 y_test = np.argmax(y_test, axis=-1)
 
@@ -139,6 +139,9 @@ processing.performance_summary(
     y_labels=bacteria_list.values(),
     output=output_folder
 )
+
+y_predicted = list(map(lambda x: list(y_indices.keys())[x], y_predicted))
+y_test = list(map(lambda x: list(y_indices.keys())[x], y_test))
 
 print('\n> Predicting antibiotic treatments')
 antibiotic_predicted = list(map(lambda x: bacteria_antibiotics[x], y_predicted))

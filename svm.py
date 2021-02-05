@@ -51,7 +51,7 @@ classifier = SVC()
 classifier.set_params(**grid_search.best_params_)
 classifier.fit(X, y)
 
-print('\n> Predicting 30 class isolates')
+print('\n> Predicting 15 class isolates')
 y_predicted = list(map(int, classifier.predict(X_test)))
 y_test = list(map(int, y_test))
 

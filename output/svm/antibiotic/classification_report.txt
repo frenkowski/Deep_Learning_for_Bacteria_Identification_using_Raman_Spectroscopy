@@ -1,0 +1,9 @@
+               precision    recall  f1-score   support
+
+Ciprofloxacin       1.00      0.96      0.98       104
+   Penicillin       0.97      0.98      0.98       698
+   Vancomycin       0.98      0.98      0.98       698
+
+     accuracy                           0.98      1500
+    macro avg       0.98      0.97      0.98      1500
+ weighted avg       0.98      0.98      0.98      1500

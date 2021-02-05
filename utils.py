@@ -30,7 +30,7 @@ def extract_subset_by_classes(X_in, y_in, classes):
 
 def plot_confusion_matrix(y_true, y_predicted, labels=[], ax=None, output=None):
     if ax is None:
-        _, ax = plt.subplots(1, 1, figsize=(15, 12))
+        _, ax = plt.subplots(1, 1, figsize=(8, 8))
 
     cm = confusion_matrix(y_true, y_predicted)
     cm = 100 * cm / cm.sum(axis=1)[:, np.newaxis]

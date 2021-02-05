@@ -45,7 +45,7 @@ np.random.seed(2021)
 tf.random.set_seed(2021)
 
 dataset_folder = os.path.join(os.getcwd(), 'dataset', 'bacteria')
-output_folder = os.path.join(os.getcwd(), 'output', 'cnn')
+output_folder = os.path.join(os.getcwd(), 'output', 'cnn-30class-gridsearch')
 
 X, y, y_indices = processing.preprocess_dataset('reference', dataset_folder,
     classes=bacteria_list.keys(),
@@ -76,19 +76,13 @@ print('### CNN Model ###')
 metric = 'accuracy'
 tuned_parameters = {
     'epochs': [50],
-    # 'batch_size': [32, 64],
-    # 'conv_layers': [1, 2],
-    # 'filters': [16, 32],
-    # 'kernel_size': [3, 5],
-    # 'units': [512, 1024],
-    # 'dropout_rate': [0.3, 0.5],
+    'batch_size': [16, 32, 64],
+    'conv_layers': [2, 3],
+    'filters': [16, 32],
+    'kernel_size': [3, 5],
+    'units': [256, 512, 1024],
+    'dropout_rate': [0.3, 0.5],
 
-    'batch_size': [64],
-    'conv_layers': [3],
-    'filters': [8],
-    'kernel_size': [5],
-    'units': [256],
-    'dropout_rate': [0.2],
     'optimizer': ['adam'],
     'init_mode': ['glorot_uniform'],
 }
@@ -98,8 +92,8 @@ print(' - Tuning hyper-parameters for \'{}\' metric\n'.format(metric))
 grid_search = GridSearchCV(
     KerasClassifier(build_fn=build_model, verbose=0),
     tuned_parameters,
-    cv=2,
-    n_jobs=3,
+    cv=3,
+    n_jobs=-1,
     verbose=2
 )
 
@@ -118,18 +112,17 @@ processing.grid_search_summary(grid_search)
 # -------
 
 print('\n> Fine tuning best CNN model from grid search')
-X_train, X_val, y_train, y_val = train_test_split(X_finetune, y_finetune, shuffle=False)
+X_train, X_val, y_train, y_val = train_test_split(X_finetune, y_finetune, shuffle=False, test_size=0.2)
 print(' - X train shape: {}\n - Y train shape: {}'.format(X_train.shape, y_train.shape))
 print(' - X val shape: {}\n - Y val shape: {}'.format(X_val.shape, y_val.shape))
 print()
 
 base_model = grid_search.best_estimator_.model
 base_model.trainable = False
-# base_model.summary()
 
 x = base_model.get_layer('flatten').output
-x = layers.Dense(256, activation='relu')(x)
 x = layers.Dense(64, activation='relu')(x)
+x = layers.Dropout(0.5)(x)
 x = layers.Dense(num_classes, activation='softmax')(x)
 
 finetune_model = Model(inputs=base_model.input, outputs=x)
@@ -145,6 +138,7 @@ plot_model(finetune_model, to_file=os.path.join(output_folder, 'model', 'model.p
 
 batch_size = grid_search.best_params_['batch_size']
 epochs = grid_search.best_params_['epochs']
+
 history = finetune_model.fit(
     X_train,
     y_train,
@@ -171,7 +165,7 @@ y_test = np.argmax(y_test, axis=-1)
 processing.performance_summary(
     y_test,
     y_predicted,
-    y_mapping=y_indices.values(),
+    y_mapping=lambda x: list(y_indices.values())[x],
     y_labels=bacteria_list.values(),
     output=output_folder
 )
